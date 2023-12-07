@@ -1,0 +1,248 @@
+---
+title: "STAT2005: MSFT Simulation"
+output: html_notebook
+---
+
+# Microsfot Simulation 
+```{r}
+# install necessary packages
+library(quantmod)
+library(Monte.Carlo.se)
+library(MonteCarlo)
+library(MonteCarloSEM)
+library(timeSeries)
+library(mltools)
+library(MLmetrics)
+library(sjmisc)
+library(mltools)
+library(sjPlot)
+library(dplyr)
+library(tidyverse)
+library(lubridate)
+library(forecast)
+library(ggplot2)
+library(tidyr)
+library(zoo)
+library(tseries)
+```
+
+# Step 1: Data Cleaning and Preparation
+## Plotting the data
+```{r}
+# plot the data to see the relationship between the different variables with each other
+plot(microsoft_stocks)
+```
+
+```{r}
+par(mfrow = c(1,2))
+# plots the last 1000 values of the data for Close
+microsoft_stocks$Close %>% tail(1000) %>% 
+  plot(type = "l",
+       col = "blue",
+       lwd = 2,
+       xlab = "Time [Days]",
+       ylab = "Stock Market Close Price",
+       main = "MSFT Close Prices")
+
+#plots the last 1000 values of data for Adjusted Close
+microsoft_stocks$Adj.Close %>% tail(1000) %>% 
+  plot(type = "l",
+       col = "purple",
+       lwd = 2,
+       xlab = "Time [Days]",
+       ylab = "Stock Market Adj Close Price",
+       main = "MSFT Adj Close Prices")
+```
+
+```{r}
+par(mfrow = c(1,3))
+#plots the last 1000 values of data for Open
+microsoft_stocks$Open %>% tail(1000) %>% 
+  plot(type = "l",
+       col = "green",
+       lwd = 2,
+       xlab = "Time [Days]",
+       ylab = "Stock Market Open Price",
+       main = "MSFT Open Prices")
+
+#plots the last 1000 values of data for High
+microsoft_stocks$High %>% tail(1000) %>% 
+  plot(type = "l",
+       col = "red",
+       lwd = 2,
+       xlab = "Time [Days]",
+       ylab = "High",
+       main = "MSFT Highest Prices")
+
+#plots the last 1000 values of data for Volume
+microsoft_stocks$Volume %>% tail(1000) %>% 
+  plot(type = "l",
+       col = "brown",
+       lwd = 2,
+       xlab = "Time [Days]",
+       ylab = "Volume",
+       main = "MSFT Shares Bought")
+```
+
+For the data, the graphs look clean, however we are only interested in the adjusted close price, and from viewing the table, there are some missing values that are present in the table that need to be fixed.
+
+## Fixing missing values and making a new dataset that consists of Date and Adj Close only
+```{r}
+MSFT <- microsoft_stocks %>%
+  mutate(Date = ymd(Date)) %>%
+  select(c(Date, Adj.Close)) %>%
+  complete(Date = seq.Date(min(Date), max(Date), by = "day")) %>%
+  arrange()
+
+head(MSFT)
+```
+```{r}
+# checks to see if there are any missing values
+is.na(MSFT) 
+```
+## Plotting new datasdet to see if there are missing values or not
+```{r}
+MSFT %>% tail(500) %>%
+  plot(type = "l",
+       col = "red",
+       lwd = 2,
+       xlab = "Time (Days)",
+       ylab = "Adj Close",
+       main = "MSFT Adj Stock Market Close Price")
+```
+From the plot, we can see that there are missing values present. We cannopt use this for a time series model as for a time series model, the data must be in order and sequential.
+
+## Use extend function to remove missing values
+```{r}
+library(zoo)
+MSFT_adj <- MSFT %>%
+  mutate(Adj.Close = na.fill(Adj.Close, "extend"))
+```
+
+## Plotting to see new graphs without missing values
+```{r}
+par(mfrow = c(1,2))
+MSFT_adj %>%
+  plot(type = "l",
+       col = "red",
+       lwd = 2,
+       xlab = "Time (Days)",
+       ylab = "Adj Close",
+       main = "MSFT Adj Stock Market Close Price")
+
+MSFT_adj %>% tail(500) %>%
+  plot(type = "l",
+       col = "red",
+       lwd = 2,
+       xlab = "Time (Days)",
+       ylab = "Adj Close",
+       main = "MSFT Adj Stock Market Close Price")
+
+
+```
+```{r}
+class(MSFT_adj)
+```
+
+
+
+# Step 2: Time Series
+## Makes data's class time series and plots a forecast plot
+```{r}
+# makes data to time series object
+msftTimeSeries <- ts(data = MSFT_adj$Adj.Close)
+class(msftTimeSeries)
+```
+```{r}
+autoplot(msftTimeSeries, xlab = "Adjusted Close Price", main = "MSFT Adjusted Close Price")
+```
+## Validate the data by splitting the data into train and test sets
+```{r}
+set.seed(1234)
+Index <- floor(0.8*length(msftTimeSeries)) # 80 % for training, 20% for testing
+
+# Window function used to extract subset of adjusted time series data between the head and tail (i.e. start and end times)
+MSFTTrain <- window(msftTimeSeries, end = Index) 
+MSFTTest <- window(msftTimeSeries, start = Index + 1)
+
+autoplot(MSFTTrain)
+```
+
+## ARIMA time series model
+## ADF Test
+```{r}
+adf.test(MSFTTrain)
+```
+The augmented dickey fuller test is a statistical test that is used to test whether a given time series is stationary or not with the hypothesis being: 
+Ho = Data is not stationary
+Ha = Data is stationary
+
+We assume that significance level will be 5%, and as the p-value is quite high, we fail to reject the initial hypothesis, Ho; data is not stationary.
+
+## ARIMA model implementation
+```{r}
+modelAuto_msft <- auto.arima(MSFTTrain)
+modelAuto_msft
+```
+
+## Forecast Adjusted Close Price values for the next 31 days
+```{r}
+MSFT_forecast <- forecast(object = modelAuto_msft, h = 31)
+MSFT_forecast
+```
+
+## Check the accuracy of the forecast
+```{r}
+MSFT_accuracy <- accuracy(MSFT_forecast, MSFTTest)
+MSFT_accuracy
+```
+
+## Plotting the forecast
+```{r}
+autoplot(MSFT_forecast)
+```
+# Monte Carlo Simulation
+# Monte Carlo Simulation 
+```{r}
+summary(MSFT_forecast)
+hist(MSFT_forecast$mean)
+shapiro.test(MSFT_forecast$mean)
+```
+
+```{r}
+set.seed(1234)
+mu_msft = mean(MSFT_forecast$mean) + sd(MSFT_forecast$mean) * rt(10000, length(MSFT_forecast$mean) - 1)/sqrt(var(MSFT_forecast$mean)/length(MSFT_forecast$mean))
+sig_msft = 0
+for (k in 1:10000) {
+    b_msft = sum(((MSFT_forecast$mean) - mu_msft[k])^2)/2
+    sig_msft[k] = 1/rgamma(1, length(MSFT_forecast$mean)/2, b_msft)
+}
+```
+```{r}
+mean(mu_msft)
+mean(sig_msft)
+```
+```{r}
+quantile(mu_msft, c(0.025,0.975))
+quantile(sig_msft, c(0.025,0.975))
+```
+```{r}
+hist(mu_msft)
+hist(sig_msft)
+```
+```{r}
+library(ggplot2) 
+library(ggExtra)
+dfb5 <- data.frame(x = mu_msft, y = sig_msft)
+pl5 <- ggplot(dfb5, aes(x, y)) + geom_point() + xlab("Mean") + ylab("Variance") + ggtitle("Microsoft")
+ggExtra::ggMarginal(pl5, type = "histogram")
+```
+
+
+
+
+
+
+
+
+
